@@ -10,27 +10,27 @@ CORS(app)  # Enable CORS for all routes
 @app.route('/api/recommendations', methods=['POST'])
 def get_recommendations():
     """Return top videos for a given topic from JSON input."""
-    
+
     # Get JSON data from request
     data = request.get_json()
-    
+
     # Check if topic is provided in JSON
     if not data or 'topic' not in data:
         return jsonify({
             'success': False,
             'error': 'Missing topic in request JSON'
         }), 400
-    
+
     topic = data['topic']
-    
+
     if not config.YOUTUBE_API_KEY:
         return jsonify({
             'success': False,
             'error': 'YouTube API key not configured'
         }), 500
-    
+
     videos = youtube_services.search_videos(topic)
-    
+
     return jsonify({
         'success': True,
         'topic': topic,

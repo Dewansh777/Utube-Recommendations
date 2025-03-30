@@ -1,70 +1,55 @@
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-import config
+import googleapiclient.discovery
+import config  
+def search_videos(topic, min_duration=900): # 15 minutes = 900 seconds
+    """Searches YouTube videos for a given topic and filters by duration."""
 
-def get_service():
-    """Build and return a YouTube API service object."""
-    return build('youtube', 'v3', developerKey=config.YOUTUBE_API_KEY)
+    youtube = googleapiclient.discovery.build("youtube", "v3", developerKey=config.YOUTUBE_API_KEY)
 
-def search_videos(topic, max_results=config.MAX_RESULTS):
-    """
-    Search for videos related to a topic and return top videos by viewCount.
-    
-    Args:
-        topic (str): The topic to search for
-        max_results (int): Maximum number of results to return
-        
-    Returns:
-        list: List of video data dictionaries
-    """
-    try:
-        # Create YouTube API service
-        youtube = get_service()
-        
-        # First, search for videos with the topic
-        search_response = youtube.search().list(
-            q=topic,
-            part='id',
-            maxResults=50,  # Get more results to filter by view count
-            type='video',
-            relevanceLanguage='en',
-            order='relevance'  # Start with relevant videos
+    # Search for videos
+    search_response = youtube.search().list(
+        q=topic,
+        part="id",
+        maxResults=10, # Or whatever max results you wish.
+        type="video",
+    ).execute()
+
+    video_ids = [item["id"]["videoId"] for item in search_response.get("items", []) if item["id"].get("videoId")]
+
+    # Retrieve video statistics and duration
+    video_stats = []
+    if video_ids:
+        video_response = youtube.videos().list(
+            part="snippet,contentDetails,statistics",
+            id=",".join(video_ids)
         ).execute()
-        
-        # Get video IDs from search results
-        video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
-        
-        if not video_ids:
-            return []
-            
-        # Get detailed information about the videos including view count
-        videos_response = youtube.videos().list(
-            part='snippet,statistics',
-            id=','.join(video_ids)
-        ).execute()
-        
-        # Process and sort videos by view count
-        videos = []
-        for item in videos_response.get('items', []):
-            # Sometimes videos don't have view counts
-            view_count = int(item['statistics'].get('viewCount', 0))
-            
-            videos.append({
-                'id': item['id'],
-                'title': item['snippet']['title'],
-                'thumbnail': item['snippet']['thumbnails']['high']['url'],
-                'channel': item['snippet']['channelTitle'],
-                'view_count': view_count,
-                'url': f"https://www.youtube.com/watch?v={item['id']}"
-            })
-        
-        # Sort by view count (descending) and return top results
-        sorted_videos = sorted(videos, key=lambda x: x['view_count'], reverse=True)
-        return sorted_videos[:max_results]
-        
-    except HttpError as e:
-        print(f"An HTTP error occurred: {e}")
-        return []
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return []
+
+        for item in video_response.get("items", []):
+            duration = item["contentDetails"]["duration"]
+            duration_seconds = _parse_duration(duration)
+
+            if duration_seconds >= min_duration:
+                video_stats.append({
+                    "title": item["snippet"]["title"],
+                    "videoId": item["id"],
+                    "viewCount": int(item["statistics"].get("viewCount", 0)),
+                    "likeCount": int(item["statistics"].get("likeCount", 0)),
+                    "duration": duration_seconds,
+                    "thumbnail": item["snippet"]["thumbnails"]["default"]["url"],
+                })
+
+    return video_stats
+
+def _parse_duration(duration):
+    """Parses ISO 8601 duration format into seconds."""
+
+    import re
+    duration_regex = re.compile(r'PT((?P<hours>\d+)H)?((?P<minutes>\d+)M)?((?P<seconds>\d+)S)?')
+    match = duration_regex.match(duration)
+
+    if match:
+        hours = int(match.group('hours') or 0)
+        minutes = int(match.group('minutes') or 0)
+        seconds = int(match.group('seconds') or 0)
+        return hours * 3600 + minutes * 60 + seconds
+    else:
+        return 0
