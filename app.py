@@ -38,7 +38,7 @@ def get_recommendations():
         'videos': videos
     })
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health', methods=['HEAD'])
 def health_check():
     """Simple health check endpoint."""
     return jsonify({
